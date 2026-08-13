@@ -1,6 +1,8 @@
 import { app, BrowserWindow } from 'electron';
-import { autoUpdater } from 'electron-updater';
+import electronUpdater from 'electron-updater';
 import { startServer } from './server.mjs';
+
+const { autoUpdater } = electronUpdater;
 
 const PORT = 4870;
 
