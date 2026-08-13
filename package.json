@@ -31,7 +31,8 @@
     "publish": {
       "provider": "github",
       "owner": "c3-jack",
-      "repo": "c3-console"
+      "repo": "c3-console",
+      "releaseType": "release"
     }
   }
 }
