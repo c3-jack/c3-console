@@ -1,0 +1,1454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>c3-console</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0f1115;
+    --panel: #1a1d24;
+    --border: #2a2e37;
+    --text: #e6e8eb;
+    --muted: #9aa1ac;
+    --accent: #4f8cff;
+    --ok: #3ecf8e;
+    --err: #ff5c5c;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    box-sizing: border-box;
+  }
+  h1 {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 0 0 12px;
+    color: var(--muted);
+    letter-spacing: 0.02em;
+    flex-shrink: 0;
+  }
+  .row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .row label {
+    width: 70px;
+    flex-shrink: 0;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  input, select {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 7px 9px;
+    font-size: 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  select { width: auto; flex-shrink: 0; }
+  #profileSelect { flex: 1; width: auto; }
+  #profileSelect option.expired { color: var(--err); }
+  #console {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    overflow-y: auto;
+    font-size: 12.5px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .entry { margin-bottom: 10px; }
+  .cmd { color: var(--accent); }
+  .cmd::before { content: "\276F "; color: var(--muted); }
+  .trace { color: var(--muted); font-size: 11px; margin: 2px 0 2px 14px; opacity: 0.75; }
+  .meta { color: var(--muted); font-size: 11px; margin: 2px 0; }
+  .meta.ok { color: var(--ok); }
+  .meta.err { color: var(--err); }
+  .result { color: var(--text); }
+  .result.err { color: var(--err); }
+  .result-wrap { margin-top: 2px; }
+  .result-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+    opacity: 0.55;
+    transition: opacity 0.1s;
+  }
+  .result-wrap:hover .result-toolbar { opacity: 1; }
+  .ghost-icon {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  .ghost-icon:hover { color: var(--text); border-color: var(--accent); }
+  .view-toggle { display: flex; gap: 10px; font-size: 11px; }
+  .view-link { color: var(--muted); text-decoration: none; }
+  .view-link.active { color: var(--accent); font-weight: 600; }
+  .view-link:hover { color: var(--text); }
+  .grid-view { max-height: 340px; overflow: auto; border: 1px solid var(--border); border-radius: 6px; }
+  .result-grid { border-collapse: collapse; font-size: 11px; width: 100%; }
+  .result-grid th, .result-grid td { border-bottom: 1px solid var(--border); padding: 2px 7px; text-align: left; vertical-align: top; white-space: nowrap; }
+  .result-grid thead th { position: sticky; top: 0; background: var(--panel); }
+  .result-grid th { color: var(--muted); font-weight: 600; cursor: pointer; user-select: none; }
+  .result-grid th:hover { color: var(--text); }
+  .result-grid th.sort-asc::after { content: " \25B2"; }
+  .result-grid th.sort-desc::after { content: " \25BC"; }
+  .result-grid .gidx { color: var(--muted); text-align: right; }
+  .result-grid td { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+  .cols-menu {
+    display: none;
+    position: fixed; z-index: 999;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+    padding: 6px 8px; min-width: 160px; max-height: 240px; overflow-y: auto; overflow-x: hidden;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  }
+  .cols-menu.open { display: block; }
+  .cols-menu-actions { display: flex; gap: 10px; margin-bottom: 6px; font-size: 11px; }
+  .cols-menu-actions a { color: var(--accent); text-decoration: none; cursor: pointer; }
+  .cols-item { display: block; font-size: 11.5px; padding: 2px 0; cursor: pointer; white-space: nowrap; }
+  .cols-item input { width: auto; padding: 0; border: none; border-radius: 0; background: none; margin-right: 6px; vertical-align: middle; }
+  .ctx-menu {
+    display: none;
+    position: fixed; z-index: 1000;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px; min-width: 140px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+  }
+  .ctx-menu.open { display: block; }
+  .ctx-item { padding: 5px 10px; font-size: 11.5px; cursor: pointer; border-radius: 4px; white-space: nowrap; }
+  .ctx-item:hover { background: var(--border); }
+  .jnode { display: block; }
+  .jnode > summary.jsummary { cursor: pointer; }
+  .jnode:not([open]) > summary.jsummary .jcount { display: inline; }
+  .jsummary { list-style: revert; }
+  .jsummary::marker { color: var(--muted); }
+  .jsummary .jcount { color: var(--muted); font-size: 11px; margin: 0 2px; }
+  .jchildren { margin-left: 18px; padding-left: 10px; border-left: 1px solid var(--border); }
+  .jitem { padding: 1px 0; }
+  .jkey { color: var(--accent); }
+  .jstr { color: var(--ok); }
+  .jnum { color: #d19a66; }
+  .jbool { color: #c586c0; }
+  .jnull { color: var(--muted); font-style: italic; }
+  .jpunc { color: var(--muted); }
+  .prompt-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 10px;
+    flex-shrink: 0;
+  }
+  .prompt-row .chevron { color: var(--accent); font-family: ui-monospace, monospace; padding-top: 9px; }
+  #cmdInput {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 9px 10px;
+    font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    resize: none;
+    overflow-y: auto;
+    max-height: 200px;
+    min-height: 20px;
+    line-height: 1.4;
+  }
+  #cmdInput:focus { outline: 1px solid var(--accent); }
+  #hintLine {
+    color: var(--muted);
+    font-size: 11px;
+    margin: 4px 0 0 22px;
+    min-height: 14px;
+    flex-shrink: 0;
+  }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 16px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  button.ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+  .tabbar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 14px;
+    flex-shrink: 0;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .tab {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 8px 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--muted);
+  }
+  .tab.active {
+    color: var(--text);
+    border-color: var(--accent);
+  }
+  .tab-close {
+    opacity: 0.6;
+    border-radius: 4px;
+    padding: 0 4px;
+    line-height: 1.4;
+  }
+  .tab-close:hover { opacity: 1; background: var(--border); }
+  .tab-rename { opacity: 0.5; }
+  .tab-rename:hover { opacity: 1; }
+  .tab-add {
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--muted);
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .tab-add:hover { color: var(--text); border-color: var(--accent); }
+</style>
+</head>
+<body>
+  <h1>c3-console — type Type.method(arg1, arg2).method2(arg3).field and hit Enter &middot; type help() for shortcuts</h1>
+
+  <div class="tabbar" id="tabBar"></div>
+
+  <div class="row">
+    <label for="baseUrl">App URL</label>
+    <input id="baseUrl" placeholder="https://host/tenant/tag/app" />
+  </div>
+  <div class="row">
+    <label for="authToken">Auth</label>
+    <input id="authToken" placeholder="paste token" />
+    <select id="authStyle" title="Authorization header style">
+      <option value="c3auth">c3auth=</option>
+      <option value="bearer">Bearer</option>
+    </select>
+    <button class="ghost" id="clearBtn" title="Clear console (Cmd+K)">Clear</button>
+    <button class="ghost" id="zoomOutBtn" title="Zoom out">&minus;</button>
+    <span id="zoomLabel" class="meta">100%</span>
+    <button class="ghost" id="zoomInBtn" title="Zoom in">+</button>
+    <span id="typeCatalogStatus" class="meta" title="Type names loaded from the app's typesys/8/names.json, used for autocomplete"></span>
+  </div>
+  <div class="row">
+    <label for="profileSelect">Token</label>
+    <select id="profileSelect" title="Switch saved App URL + Auth Token"></select>
+    <button class="ghost" id="saveProfileBtn" title="Save the current App URL + Auth as a named token">Save as&hellip;</button>
+    <button class="ghost" id="deleteProfileBtn" title="Delete the selected saved token">Delete</button>
+  </div>
+  <div class="row">
+    <label for="snippetSelect">Snip</label>
+    <select id="snippetSelect" title="Insert a saved command"></select>
+    <button class="ghost" id="saveSnippetBtn" title="Save what's in the input below as a named snippet">Save as&hellip;</button>
+    <button class="ghost" id="deleteSnippetBtn" title="Delete the selected snippet">Delete</button>
+  </div>
+
+  <div id="console"></div>
+
+  <div class="prompt-row">
+    <span class="chevron">&#8250;</span>
+    <textarea id="cmdInput" rows="1" placeholder="User.myUser().generateSessionToken(DateTime.now().plusDays(10)).signedToken" autocomplete="off" spellcheck="false"></textarea>
+  </div>
+  <div id="hintLine"></div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const baseUrlEl = $('baseUrl'), authTokenEl = $('authToken'), authStyleEl = $('authStyle');
+  const consoleEl = $('console'), cmdInput = $('cmdInput'), clearBtn = $('clearBtn');
+  const typeCatalogStatusEl = $('typeCatalogStatus');
+  const profileSelectEl = $('profileSelect'), saveProfileBtn = $('saveProfileBtn'), deleteProfileBtn = $('deleteProfileBtn');
+  const snippetSelectEl = $('snippetSelect'), saveSnippetBtn = $('saveSnippetBtn'), deleteSnippetBtn = $('deleteSnippetBtn');
+  const tabBarEl = $('tabBar'), hintLineEl = $('hintLine');
+
+  function autoGrowCmdInput() {
+    cmdInput.style.height = 'auto';
+    cmdInput.style.height = Math.min(cmdInput.scrollHeight, 200) + 'px';
+  }
+  function setCmdInput(text) {
+    cmdInput.value = text;
+    autoGrowCmdInput();
+  }
+  cmdInput.addEventListener('input', autoGrowCmdInput);
+
+  let history = [];
+  let historyIdx = 0;
+  let draft = '';
+
+  // ---- Tabs: each is an independent session — its own App URL + Auth Token + style,
+  // console log, and command history. Lets you juggle several apps/environments at once.
+
+  function makeTabId() {
+    return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function makeBlankTab(label) {
+    return { id: makeTabId(), label, baseUrl: '', authToken: '', authStyle: 'c3auth', log: '', history: [], profileId: '' };
+  }
+
+  let tabs = [makeBlankTab('Tab 1')];
+  let activeTabId = tabs[0].id;
+
+  function activeTab() {
+    return tabs.find((t) => t.id === activeTabId);
+  }
+
+  // ---- Durable state: persisted to a real file on disk via the local server
+  // (~/Library/Application Support/c3-console/state.json), not the Chrome profile's
+  // localStorage — survives profile resets, "clear browsing data", Chrome updates, etc.
+
+  async function persistState() {
+    try {
+      await fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tabs, activeTabId, profiles, snippets }),
+      });
+    } catch (e) {
+      console.error('Failed to save c3-console state', e);
+    }
+  }
+
+  function syncActiveTabFromUI() {
+    const t = activeTab();
+    if (!t) return;
+    t.baseUrl = baseUrlEl.value;
+    t.authToken = authTokenEl.value;
+    t.authStyle = authStyleEl.value;
+    t.log = consoleEl.innerHTML;
+    t.history = history.slice(-100);
+    t.profileId = profileSelectEl.value;
+  }
+
+  function loadTabIntoUI(t) {
+    baseUrlEl.value = t.baseUrl || '';
+    authTokenEl.value = t.authToken || '';
+    authStyleEl.value = t.authStyle || 'c3auth';
+    consoleEl.innerHTML = t.log || '';
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+    history = (t.history || []).slice();
+    historyIdx = history.length;
+    draft = '';
+    setCmdInput('');
+    renderProfiles();
+    profileSelectEl.value = t.profileId && profiles.some((p) => p.id === t.profileId) ? t.profileId : '';
+  }
+
+  function renderTabs() {
+    tabBarEl.innerHTML = '';
+    for (const t of tabs) {
+      const chip = document.createElement('div');
+      chip.className = 'tab' + (t.id === activeTabId ? ' active' : '');
+      chip.title = 'Double-click to rename';
+      const labelSpan = document.createElement('span');
+      labelSpan.textContent = t.label;
+      chip.appendChild(labelSpan);
+      const renameSpan = document.createElement('span');
+      renameSpan.className = 'tab-rename';
+      renameSpan.textContent = '✎';
+      renameSpan.title = 'Rename tab';
+      renameSpan.addEventListener('click', (e) => { e.stopPropagation(); renameTab(t.id); });
+      chip.appendChild(renameSpan);
+      const closeSpan = document.createElement('span');
+      closeSpan.className = 'tab-close';
+      closeSpan.textContent = '✕';
+      closeSpan.title = 'Close tab';
+      closeSpan.addEventListener('click', (e) => { e.stopPropagation(); closeTab(t.id); });
+      chip.appendChild(closeSpan);
+      chip.addEventListener('click', () => switchTab(t.id));
+      chip.addEventListener('dblclick', () => renameTab(t.id));
+      tabBarEl.appendChild(chip);
+    }
+    const addBtn = document.createElement('button');
+    addBtn.className = 'tab-add';
+    addBtn.textContent = '+';
+    addBtn.title = 'New tab';
+    addBtn.addEventListener('click', () => newTab());
+    tabBarEl.appendChild(addBtn);
+  }
+
+  function switchTab(id) {
+    if (id === activeTabId) return;
+    syncActiveTabFromUI();
+    activeTabId = id;
+    loadTabIntoUI(activeTab());
+    persistState();
+    renderTabs();
+    cmdInput.focus();
+    refreshTypeCatalog();
+  }
+
+  function newTab() {
+    syncActiveTabFromUI();
+    const t = makeBlankTab(`Tab ${tabs.length + 1}`);
+    tabs.push(t);
+    activeTabId = t.id;
+    loadTabIntoUI(t);
+    persistState();
+    renderTabs();
+    cmdInput.focus();
+  }
+
+  function closeTab(id) {
+    if (tabs.length <= 1) {
+      alert("Can't close the last tab.");
+      return;
+    }
+    const idx = tabs.findIndex((t) => t.id === id);
+    if (idx === -1) return;
+    const wasActive = id === activeTabId;
+    tabs.splice(idx, 1);
+    if (wasActive) {
+      const next = tabs[Math.max(0, idx - 1)];
+      activeTabId = next.id;
+      loadTabIntoUI(next);
+      refreshTypeCatalog();
+    }
+    persistState();
+    renderTabs();
+  }
+
+  function renameTab(id) {
+    const t = tabs.find((x) => x.id === id);
+    if (!t) return;
+    const label = prompt('Rename tab:', t.label);
+    if (!label) return;
+    t.label = label;
+    persistState();
+    renderTabs();
+  }
+
+  // ---- Saved auth-token profiles: each pairs an App URL + Auth Token + style under a label,
+  // so switching tokens also switches you to the right app. Usable from any tab.
+
+  let profiles = [];
+
+  function decodeJwtPayload(token) {
+    try {
+      const parts = token.split('.');
+      if (parts.length < 2) return null;
+      let b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      while (b64.length % 4) b64 += '=';
+      return JSON.parse(atob(b64));
+    } catch {
+      return null;
+    }
+  }
+
+  function tokenExpiryInfo(token) {
+    const payload = decodeJwtPayload(token);
+    if (!payload || !payload.exp) return { text: '', expired: false };
+    const ms = payload.exp * 1000 - Date.now();
+    if (ms <= 0) return { text: 'EXPIRED', expired: true };
+    const mins = Math.round(ms / 60000);
+    const text = mins < 60 ? `expires in ${mins}m`
+      : mins < 60 * 48 ? `expires in ${Math.round(mins / 60)}h`
+      : `expires in ${Math.round(mins / 60 / 24)}d`;
+    return { text, expired: false };
+  }
+
+  function renderProfiles() {
+    const prevValue = profileSelectEl.value;
+    profileSelectEl.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = profiles.length ? '— saved tokens —' : '— no saved tokens —';
+    profileSelectEl.appendChild(placeholder);
+    for (const p of profiles) {
+      const info = tokenExpiryInfo(p.authToken);
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = info.text ? `${p.label} (${info.text})` : p.label;
+      if (info.expired) opt.className = 'expired';
+      profileSelectEl.appendChild(opt);
+    }
+    if (profiles.some((p) => p.id === prevValue)) profileSelectEl.value = prevValue;
+  }
+
+  function applyProfile(p) {
+    baseUrlEl.value = p.baseUrl;
+    authTokenEl.value = p.authToken;
+    authStyleEl.value = p.authStyle || 'c3auth';
+    syncActiveTabFromUI();
+    persistState();
+    refreshTypeCatalog();
+  }
+
+  profileSelectEl.addEventListener('change', () => {
+    const p = profiles.find((x) => x.id === profileSelectEl.value);
+    if (p) applyProfile(p);
+  });
+
+  saveProfileBtn.addEventListener('click', () => {
+    const baseUrl = baseUrlEl.value.trim();
+    const authToken = authTokenEl.value.trim();
+    if (!baseUrl || !authToken) {
+      alert('Fill in App URL and Auth Token first.');
+      return;
+    }
+    let defaultLabel = '';
+    try { defaultLabel = new URL(baseUrl).hostname; } catch { /* leave blank */ }
+    const label = prompt('Name this token:', defaultLabel);
+    if (!label) return;
+    const id = makeTabId();
+    profiles.push({ id, label, baseUrl, authToken, authStyle: authStyleEl.value });
+    renderProfiles();
+    profileSelectEl.value = id;
+    syncActiveTabFromUI();
+    persistState();
+  });
+
+  deleteProfileBtn.addEventListener('click', () => {
+    const id = profileSelectEl.value;
+    const p = profiles.find((x) => x.id === id);
+    if (!p) return;
+    if (!confirm(`Delete saved token "${p.label}"?`)) return;
+    profiles = profiles.filter((x) => x.id !== id);
+    renderProfiles();
+    syncActiveTabFromUI();
+    persistState();
+  });
+
+  setInterval(renderProfiles, 60000);
+
+  // ---- Snippets: named, reusable command lines. Selecting one inserts it into the input
+  // (doesn't run it) so you can review/tweak params first.
+
+  let snippets = [];
+
+  function renderSnippets() {
+    snippetSelectEl.innerHTML = '';
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = snippets.length ? '— snippets —' : '— no snippets —';
+    snippetSelectEl.appendChild(placeholder);
+    for (const s of snippets) {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.label;
+      snippetSelectEl.appendChild(opt);
+    }
+  }
+
+  snippetSelectEl.addEventListener('change', () => {
+    const s = snippets.find((x) => x.id === snippetSelectEl.value);
+    if (!s) return;
+    setCmdInput(s.code);
+    cmdInput.focus();
+    snippetSelectEl.value = '';
+  });
+
+  saveSnippetBtn.addEventListener('click', () => {
+    const code = cmdInput.value.trim();
+    if (!code) {
+      alert('Type a command in the input below first.');
+      return;
+    }
+    const label = prompt('Name this snippet:', code.length > 40 ? `${code.slice(0, 40)}…` : code);
+    if (!label) return;
+    snippets.push({ id: makeTabId(), label, code });
+    persistState();
+    renderSnippets();
+  });
+
+  deleteSnippetBtn.addEventListener('click', () => {
+    const id = snippetSelectEl.value;
+    const s = snippets.find((x) => x.id === id);
+    if (!s) return;
+    if (!confirm(`Delete snippet "${s.label}"?`)) return;
+    snippets = snippets.filter((x) => x.id !== id);
+    persistState();
+    renderSnippets();
+  });
+
+  // ---- Remote type catalog: the app's own typesys/8/names.json?includeInnerTypes lists
+  // every type name it knows about (same auth header as REST calls). No per-type method/field
+  // endpoint exists, so method completion still comes from local usage history below.
+
+  let remoteTypeNames = new Set();
+  let typeCatalogKey = '';
+
+  async function refreshTypeCatalog() {
+    const baseUrl = baseUrlEl.value.trim();
+    const authToken = authTokenEl.value.trim();
+    const authStyle = authStyleEl.value;
+    if (!baseUrl || !authToken) return;
+    const key = `${baseUrl}|${authStyle}|${authToken}`;
+    if (key === typeCatalogKey) return;
+    try {
+      const res = await fetch('/api/types', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ baseUrl, authToken, authStyle }),
+      });
+      const data = await res.json();
+      if (!res.ok || !Array.isArray(data.body) || data.status < 200 || data.status >= 300) {
+        typeCatalogStatusEl.textContent = '';
+        return;
+      }
+      remoteTypeNames = new Set(data.body);
+      typeCatalogKey = key;
+      typeCatalogStatusEl.textContent = `${remoteTypeNames.size.toLocaleString()} types loaded`;
+    } catch {
+      typeCatalogStatusEl.textContent = '';
+    }
+  }
+
+  // ---- Local autocomplete: Type names come from the remote catalog above (falling back to
+  // usage history if unavailable); method names come from everything typed across all tabs
+  // and snippets so far, since there's no method-listing endpoint to query.
+
+  function buildVocab() {
+    const knownTypes = new Set(remoteTypeNames);
+    const knownMethods = new Map();
+    const lines = [];
+    for (const t of tabs) lines.push(...(t.history || []));
+    lines.push(...snippets.map((s) => s.code));
+    const re = /([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)/g;
+    for (const line of lines) {
+      let m;
+      while ((m = re.exec(line))) {
+        const [, typeName, method] = m;
+        if (/^[A-Z]/.test(typeName)) knownTypes.add(typeName);
+        if (!knownMethods.has(typeName)) knownMethods.set(typeName, new Set());
+        knownMethods.get(typeName).add(method);
+      }
+    }
+    return { knownTypes, knownMethods };
+  }
+
+  function commonPrefix(strs) {
+    if (strs.length === 0) return '';
+    let prefix = strs[0];
+    for (const s of strs.slice(1)) {
+      let i = 0;
+      while (i < prefix.length && i < s.length && prefix[i] === s[i]) i++;
+      prefix = prefix.slice(0, i);
+    }
+    return prefix;
+  }
+
+  function autocomplete() {
+    const pos = cmdInput.selectionStart;
+    const text = cmdInput.value;
+    const before = text.slice(0, pos);
+    const m = before.match(/([A-Za-z_$][\w$]*)(\.([A-Za-z_$]*))?$/);
+    hintLineEl.textContent = '';
+    if (!m) return;
+
+    const { knownTypes, knownMethods } = buildVocab();
+    let matches, partial, replaceStart;
+    if (m[2] !== undefined) {
+      const typeName = m[1];
+      partial = m[3] || '';
+      matches = [...(knownMethods.get(typeName) || [])].filter((mm) => mm.startsWith(partial)).sort();
+      replaceStart = pos - partial.length;
+    } else {
+      partial = m[1];
+      matches = [...knownTypes].filter((t) => t.startsWith(partial) && t !== partial).sort();
+      replaceStart = pos - partial.length;
+    }
+
+    if (matches.length === 0) return;
+    if (matches.length === 1) {
+      const completion = matches[0];
+      setCmdInput(text.slice(0, replaceStart) + completion + text.slice(pos));
+      const newPos = replaceStart + completion.length;
+      cmdInput.selectionStart = cmdInput.selectionEnd = newPos;
+      return;
+    }
+    const prefix = commonPrefix(matches);
+    if (prefix.length > partial.length) {
+      setCmdInput(text.slice(0, replaceStart) + prefix + text.slice(pos));
+      const newPos = replaceStart + prefix.length;
+      cmdInput.selectionStart = cmdInput.selectionEnd = newPos;
+    }
+    hintLineEl.textContent = matches.slice(0, 12).join(', ') + (matches.length > 12 ? ', …' : '');
+  }
+
+  function appendEntry(html) {
+    const div = document.createElement('div');
+    div.className = 'entry';
+    div.innerHTML = html;
+    consoleEl.appendChild(div);
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+    return div;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // ---- Result rendering: a collapsible, syntax-highlighted JSON tree (native <details>
+  // gives free expand/collapse + a twisty, closer to a real console/DevTools result than flat text).
+
+  // `compact` renders nested objects/arrays as an inert one-line summary badge instead of an
+  // expanded <details> tree — used inside grid cells so one deeply-nested field (e.g. `meta`)
+  // can't blow out that row's height. The standalone Tree view always passes compact=false.
+  // `registry`, when passed, gets every rendered value pushed onto it and tagged onto its node
+  // via `data-vref` (an index into the array) — lets a right-click handler recover the exact
+  // JS value under the cursor for "copy as JSON", without re-parsing rendered text.
+  function renderJsonValue(value, compact = false, registry = null) {
+    const vref = registry ? registry.push(value) - 1 : null;
+    const tag = vref === null ? '' : ` data-vref="${vref}"`;
+    if (value === null || value === undefined) return `<span class="jnull"${tag}>${value === null ? 'null' : 'undefined'}</span>`;
+    if (typeof value === 'string') return `<span class="jstr"${tag}>"${escapeHtml(value)}"</span>`;
+    if (typeof value === 'number') return `<span class="jnum"${tag}>${value}</span>`;
+    if (typeof value === 'boolean') return `<span class="jbool"${tag}>${value}</span>`;
+    if (Array.isArray(value)) {
+      if (value.length === 0) return `<span class="jpunc"${tag}>[]</span>`;
+      if (compact) return `<span class="jpunc">[</span><span class="jcount">${value.length} item${value.length === 1 ? '' : 's'}</span><span class="jpunc">]</span>`;
+      const items = value.map((v) => `<div class="jitem">${renderJsonValue(v, compact, registry)}</div>`).join('');
+      return `<details class="jnode" open${tag}><summary class="jsummary"><span class="jpunc">[</span><span class="jcount">${value.length} item${value.length === 1 ? '' : 's'}</span><span class="jpunc">]</span></summary><div class="jchildren">${items}</div></details>`;
+    }
+    if (typeof value === 'object') {
+      const keys = Object.keys(value);
+      if (keys.length === 0) return `<span class="jpunc"${tag}>{}</span>`;
+      if (compact) return `<span class="jpunc">{</span><span class="jcount">${keys.length} key${keys.length === 1 ? '' : 's'}</span><span class="jpunc">}</span>`;
+      const items = keys.map((k) => `<div class="jitem"><span class="jkey">${escapeHtml(k)}</span><span class="jpunc">:</span> ${renderJsonValue(value[k], compact, registry)}</div>`).join('');
+      return `<details class="jnode" open${tag}><summary class="jsummary"><span class="jpunc">{</span><span class="jcount">${keys.length} key${keys.length === 1 ? '' : 's'}</span><span class="jpunc">}</span></summary><div class="jchildren">${items}</div></details>`;
+    }
+    return escapeHtml(String(value));
+  }
+
+  // ---- Tabular rendering: arrays of objects (or a single object, incl. one with parallel
+  // array-valued fields — the real console's trick for showing a single record's multi-valued
+  // fields as extra rows) get a sortable Grid view + CSV export, alongside the Tree view above.
+
+  function isPlainObject(v) {
+    return v !== null && typeof v === 'object' && !Array.isArray(v);
+  }
+
+  function toGridRows(value) {
+    if (Array.isArray(value)) {
+      if (value.length === 0 || !value.every(isPlainObject)) return null;
+      const keys = [];
+      const seen = new Set();
+      for (const row of value) {
+        for (const k of Object.keys(row)) {
+          if (!seen.has(k)) { seen.add(k); keys.push(k); }
+        }
+      }
+      return { keys, rows: value };
+    }
+    if (isPlainObject(value)) {
+      const keys = Object.keys(value);
+      if (keys.length === 0) return null;
+      const arrayFields = keys.filter((k) => Array.isArray(value[k]) && value[k].length > 1);
+      if (arrayFields.length === 0) return { keys, rows: [value] };
+      const maxLen = Math.max(...arrayFields.map((k) => value[k].length));
+      const rows = [];
+      for (let i = 0; i < maxLen; i++) {
+        const row = {};
+        for (const k of keys) {
+          row[k] = arrayFields.includes(k) ? (i < value[k].length ? value[k][i] : undefined) : (i === 0 ? value[k] : undefined);
+        }
+        rows.push(row);
+      }
+      return { keys, rows };
+    }
+    return null;
+  }
+
+  function csvCell(v) {
+    if (v === undefined || v === null) return '';
+    const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }
+
+  function toCsv(keys, rows) {
+    const lines = [keys.map(csvCell).join(',')];
+    for (const row of rows) lines.push(keys.map((k) => csvCell(row[k])).join(','));
+    return lines.join('\n');
+  }
+
+  function downloadText(text, filename, mime) {
+    const blob = new Blob([text], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // ---- Columns menu: a single shared, `position: fixed` element appended to <body> —
+  // one per grid result plus overflow:auto would put it at the mercy of Chromium's
+  // compositing/layer-order quirks around scrollable ancestors (confirmed live: table cell
+  // text painted above a position:absolute sibling despite explicit z-index/isolation), and a
+  // fixed body-level element sidesteps that entirely by never sharing a stacking context.
+  const colsMenuEl = document.createElement('div');
+  colsMenuEl.className = 'cols-menu';
+  document.body.appendChild(colsMenuEl);
+
+  function closeColsMenu() {
+    colsMenuEl.classList.remove('open');
+    colsMenuEl._btn = null;
+  }
+
+  function openColsMenu(btn, keys, hiddenCols, onChange) {
+    colsMenuEl.innerHTML = `<div class="cols-menu-actions"><a href="#" class="cols-all">All</a><a href="#" class="cols-none">None</a></div>` +
+      keys.map((k) => `<label class="cols-item"><input type="checkbox" ${hiddenCols.has(k) ? '' : 'checked'} data-key="${escapeHtml(k)}"> ${escapeHtml(k)}</label>`).join('');
+    const rect = btn.getBoundingClientRect();
+    colsMenuEl.style.left = `${rect.left}px`;
+    colsMenuEl.style.top = `${rect.bottom + 4}px`;
+    colsMenuEl.classList.add('open');
+    colsMenuEl._btn = btn;
+    colsMenuEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => cb.addEventListener('change', () => {
+      if (cb.checked) hiddenCols.delete(cb.dataset.key); else hiddenCols.add(cb.dataset.key);
+      onChange();
+    }));
+    colsMenuEl.querySelector('.cols-all').addEventListener('click', (e) => {
+      e.preventDefault();
+      hiddenCols.clear();
+      colsMenuEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => { cb.checked = true; });
+      onChange();
+    });
+    colsMenuEl.querySelector('.cols-none').addEventListener('click', (e) => {
+      e.preventDefault();
+      keys.forEach((k) => hiddenCols.add(k));
+      colsMenuEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => { cb.checked = false; });
+      onChange();
+    });
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.cols-menu') && !e.target.closest('.cols-btn')) closeColsMenu();
+  });
+
+  // ---- Right-click copy: same singleton-fixed-overlay approach as the columns menu above.
+  // Grid rows/cells resolve their value directly from the row data; tree nodes resolve theirs
+  // through the `registry` array renderJsonValue() builds alongside the rendered HTML.
+  const ctxMenuEl = document.createElement('div');
+  ctxMenuEl.className = 'ctx-menu';
+  document.body.appendChild(ctxMenuEl);
+
+  function closeCtxMenu() {
+    ctxMenuEl.classList.remove('open');
+  }
+
+  function openCtxMenu(x, y, items) {
+    ctxMenuEl.innerHTML = items.map((it, i) => `<div class="ctx-item" data-i="${i}">${escapeHtml(it.label)}</div>`).join('');
+    ctxMenuEl.style.left = `${x}px`;
+    ctxMenuEl.style.top = `${y}px`;
+    ctxMenuEl.classList.add('open');
+    ctxMenuEl.querySelectorAll('.ctx-item').forEach((el, i) => el.addEventListener('click', () => {
+      items[i].onClick();
+      closeCtxMenu();
+    }));
+  }
+
+  document.addEventListener('click', () => closeCtxMenu());
+  document.addEventListener('contextmenu', (e) => {
+    if (!e.target.closest('.result-grid') && !e.target.closest('.tree-view')) closeCtxMenu();
+  });
+
+  // Copying a bare string copies the raw text (no surrounding quotes) since that's almost
+  // always what you want when pasting an id/email/etc. elsewhere; anything else is full JSON.
+  async function copyValue(value) {
+    const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+    try {
+      await navigator.clipboard.writeText(text);
+      hintLineEl.textContent = 'Copied to clipboard';
+      setTimeout(() => { if (hintLineEl.textContent === 'Copied to clipboard') hintLineEl.textContent = ''; }, 1200);
+    } catch { /* clipboard unavailable — silently ignore */ }
+  }
+
+  function buildResultView(value) {
+    const grid = toGridRows(value);
+    const registry = [];
+    const treeHtml = renderJsonValue(value, false, registry);
+    let toolbarHtml = `<button class="copy-btn ghost-icon" title="Copy result as JSON">&#10697;</button>`;
+    let bodyHtml;
+    let wireExtra = () => {};
+
+    if (grid) {
+      const { keys, rows } = grid;
+      let sortedRows = rows.slice();
+      let sortKey = null, sortAsc = true;
+      const hiddenCols = new Set();
+
+      toolbarHtml = `<span class="view-toggle"><a href="#" class="view-link active" data-view="grid">Grid</a><a href="#" class="view-link" data-view="tree">Tree</a></span>` + toolbarHtml +
+        `<button class="cols-btn ghost-icon" title="Show/hide columns">Columns</button>` +
+        `<button class="csv-btn ghost-icon" title="Download as CSV">CSV</button>`;
+      bodyHtml = `<div class="grid-view"><table class="result-grid"><thead><tr></tr></thead><tbody></tbody></table></div>` +
+        `<div class="tree-view" style="display:none">${treeHtml}</div>`;
+
+      wireExtra = (entryDiv) => {
+        const gridViewEl = entryDiv.querySelector('.grid-view');
+        const treeViewEl = entryDiv.querySelector('.tree-view');
+        const theadTr = entryDiv.querySelector('.result-grid thead tr');
+        const tbody = entryDiv.querySelector('.result-grid tbody');
+
+        const visibleKeys = () => keys.filter((k) => !hiddenCols.has(k));
+
+        function renderGrid() {
+          const vk = visibleKeys();
+          theadTr.innerHTML = `<th class="gidx"></th>` + vk.map((k) => `<th data-key="${escapeHtml(k)}" class="${sortKey === k ? (sortAsc ? 'sort-asc' : 'sort-desc') : ''}">${escapeHtml(k)}</th>`).join('');
+          tbody.innerHTML = sortedRows.map((row, i) => `<tr data-row-idx="${i}"><td class="gidx">${i}</td>${vk.map((k) => `<td>${row[k] === undefined ? '' : renderJsonValue(row[k], true)}</td>`).join('')}</tr>`).join('');
+          theadTr.querySelectorAll('th[data-key]').forEach((th) => th.addEventListener('click', () => {
+            const key = th.dataset.key;
+            if (sortKey === key) sortAsc = !sortAsc; else { sortKey = key; sortAsc = true; }
+            sortedRows = rows.slice().sort((a, b) => {
+              const av = a[key], bv = b[key];
+              if (av === undefined && bv === undefined) return 0;
+              if (av === undefined) return 1;
+              if (bv === undefined) return -1;
+              if (av < bv) return sortAsc ? -1 : 1;
+              if (av > bv) return sortAsc ? 1 : -1;
+              return 0;
+            });
+            renderGrid();
+          }));
+        }
+        renderGrid();
+
+        tbody.addEventListener('contextmenu', (e) => {
+          const tr = e.target.closest('tr');
+          if (!tr) return;
+          e.preventDefault();
+          const row = sortedRows[Number(tr.dataset.rowIdx)];
+          const td = e.target.closest('td');
+          const items = [];
+          if (td && !td.classList.contains('gidx')) {
+            const key = visibleKeys()[[...tr.children].indexOf(td) - 1];
+            if (key !== undefined) items.push({ label: `Copy ${key}`, onClick: () => copyValue(row[key]) });
+          }
+          items.push({ label: 'Copy row as JSON', onClick: () => copyValue(row) });
+          openCtxMenu(e.clientX, e.clientY, items);
+        });
+
+        entryDiv.querySelectorAll('.view-link').forEach((a) => a.addEventListener('click', (e) => {
+          e.preventDefault();
+          entryDiv.querySelectorAll('.view-link').forEach((x) => x.classList.remove('active'));
+          a.classList.add('active');
+          const view = a.dataset.view;
+          gridViewEl.style.display = view === 'grid' ? '' : 'none';
+          treeViewEl.style.display = view === 'tree' ? '' : 'none';
+        }));
+
+        const colsBtn = entryDiv.querySelector('.cols-btn');
+        colsBtn.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (colsMenuEl.classList.contains('open') && colsMenuEl._btn === colsBtn) {
+            closeColsMenu();
+          } else {
+            openColsMenu(colsBtn, keys, hiddenCols, renderGrid);
+          }
+        });
+
+        entryDiv.querySelector('.csv-btn').addEventListener('click', () => downloadText(toCsv(visibleKeys(), sortedRows), 'result.csv', 'text/csv'));
+      };
+    } else {
+      bodyHtml = `<div class="tree-view">${treeHtml}</div>`;
+    }
+
+    const html = `<div class="result-wrap"><div class="result-toolbar">${toolbarHtml}</div>${bodyHtml}</div>`;
+
+    function wire(entryDiv) {
+      const copyBtn = entryDiv.querySelector('.copy-btn');
+      copyBtn.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(JSON.stringify(value, null, 2));
+          copyBtn.textContent = 'Copied';
+          setTimeout(() => { copyBtn.innerHTML = '&#10697;'; }, 1200);
+        } catch { /* clipboard unavailable — silently ignore */ }
+      });
+      entryDiv.querySelector('.tree-view').addEventListener('contextmenu', (e) => {
+        const node = e.target.closest('[data-vref]');
+        if (!node) return;
+        e.preventDefault();
+        openCtxMenu(e.clientX, e.clientY, [{ label: 'Copy as JSON', onClick: () => copyValue(registry[Number(node.dataset.vref)]) }]);
+      });
+      wireExtra(entryDiv);
+    }
+
+    return { html, wire };
+  }
+
+  // ---- Tokenizer + parser for a small JS subset: Type.method(args).method2(args2).field ----
+  // Supports nested calls as arguments (e.g. DateTime.now().plusDays(10)) and literals
+  // (string/number/bool/null/array/object). Not full JS — just enough to write a chain.
+
+  function tokenize(src) {
+    const tokens = [];
+    let i = 0;
+    const n = src.length;
+    while (i < n) {
+      const c = src[i];
+      if (/\s/.test(c)) { i++; continue; }
+      if (c === '"' || c === "'") {
+        const quote = c;
+        let j = i + 1, out = '';
+        while (j < n && src[j] !== quote) {
+          if (src[j] === '\\' && j + 1 < n) {
+            const esc = src[j + 1];
+            out += ({ n: '\n', t: '\t', '\\': '\\', "'": "'", '"': '"' })[esc] ?? esc;
+            j += 2;
+          } else {
+            out += src[j];
+            j++;
+          }
+        }
+        if (j >= n) throw new Error('Unterminated string literal');
+        tokens.push({ type: 'string', value: out });
+        i = j + 1;
+        continue;
+      }
+      if (/[0-9]/.test(c) || (c === '-' && /[0-9]/.test(src[i + 1] || ''))) {
+        let j = i + (c === '-' ? 1 : 0);
+        while (j < n && /[0-9.]/.test(src[j])) j++;
+        tokens.push({ type: 'number', value: Number(src.slice(i, j)) });
+        i = j;
+        continue;
+      }
+      if (/[A-Za-z_$]/.test(c)) {
+        let j = i;
+        while (j < n && /[\w$]/.test(src[j])) j++;
+        tokens.push({ type: 'ident', value: src.slice(i, j) });
+        i = j;
+        continue;
+      }
+      if ('().,{}[]:'.includes(c)) {
+        tokens.push({ type: 'punct', value: c });
+        i++;
+        continue;
+      }
+      if (c === ';') { i++; continue; }
+      throw new Error(`Unexpected character '${c}' at position ${i}`);
+    }
+    return tokens;
+  }
+
+  class Parser {
+    constructor(tokens) { this.tokens = tokens; this.pos = 0; }
+    peek() { return this.tokens[this.pos]; }
+    next() { return this.tokens[this.pos++]; }
+    expectPunct(v) {
+      const t = this.next();
+      if (!t || t.type !== 'punct' || t.value !== v) throw new Error(`Expected '${v}'${t ? ` but got '${t.value}'` : ' but reached end of input'}`);
+    }
+    atEnd() { return this.pos >= this.tokens.length; }
+
+    parseProgram() {
+      const expr = this.parseExpression();
+      if (!this.atEnd()) throw new Error(`Unexpected trailing input near '${this.peek().value}'`);
+      return expr;
+    }
+
+    parseExpression() {
+      const t = this.peek();
+      if (!t) throw new Error('Unexpected end of input');
+
+      if (t.type === 'string') { this.next(); return { kind: 'Literal', value: t.value }; }
+      if (t.type === 'number') { this.next(); return { kind: 'Literal', value: t.value }; }
+
+      if (t.type === 'punct' && t.value === '[') {
+        this.next();
+        const elements = [];
+        while (!(this.peek() && this.peek().type === 'punct' && this.peek().value === ']')) {
+          elements.push(this.parseExpression());
+          if (this.peek() && this.peek().type === 'punct' && this.peek().value === ',') this.next();
+        }
+        this.expectPunct(']');
+        return { kind: 'Array', elements };
+      }
+
+      if (t.type === 'punct' && t.value === '{') {
+        this.next();
+        const props = [];
+        while (!(this.peek() && this.peek().type === 'punct' && this.peek().value === '}')) {
+          const keyTok = this.next();
+          if (!keyTok || (keyTok.type !== 'ident' && keyTok.type !== 'string')) throw new Error('Expected object key');
+          this.expectPunct(':');
+          const value = this.parseExpression();
+          props.push({ key: keyTok.value, value });
+          if (this.peek() && this.peek().type === 'punct' && this.peek().value === ',') this.next();
+        }
+        this.expectPunct('}');
+        return { kind: 'Object', props };
+      }
+
+      if (t.type === 'ident') {
+        this.next();
+        if (t.value === 'true') return { kind: 'Literal', value: true };
+        if (t.value === 'false') return { kind: 'Literal', value: false };
+        if (t.value === 'null') return { kind: 'Literal', value: null };
+
+        let node = { kind: 'Identifier', name: t.value };
+        while (this.peek() && this.peek().type === 'punct' && this.peek().value === '.') {
+          this.next();
+          const propTok = this.next();
+          if (!propTok || propTok.type !== 'ident') throw new Error("Expected property/method name after '.'");
+          if (this.peek() && this.peek().type === 'punct' && this.peek().value === '(') {
+            this.next();
+            const args = [];
+            while (!(this.peek() && this.peek().type === 'punct' && this.peek().value === ')')) {
+              args.push(this.parseExpression());
+              if (this.peek() && this.peek().type === 'punct' && this.peek().value === ',') this.next();
+            }
+            this.expectPunct(')');
+            node = { kind: 'Call', object: node, method: propTok.value, args };
+          } else {
+            node = { kind: 'Member', object: node, property: propTok.value };
+          }
+        }
+        return node;
+      }
+
+      throw new Error(`Unexpected token '${t.value}'`);
+    }
+  }
+
+  function parseLine(line) {
+    return new Parser(tokenize(line)).parseProgram();
+  }
+
+  // ---- Shorthand macros, ported from the real C3 static console's "Better Console" Chrome
+  // extension (github.com/c3-e/c3open, tools/better-c3-console) — bare `name()` calls that
+  // expand to a full chain before parsing.
+  const SHORTHANDS = {
+    iq: 'InvalidationQueue.countAll()',
+    qs: 'InvalidationQueue.countAll()',
+    ad: 'Cluster.actionDump()',
+    cad: 'Cluster.actionDump()',
+    ch: 'Cluster.hosts()',
+  };
+
+  // Macros that take arguments, e.g. recents(HelpTicket, 5) — matched by regex since our
+  // parser only understands Type.method() chains, not bare calls with a Type as an argument.
+  const ARG_SHORTHANDS = [
+    { re: /^recents\(\s*([A-Za-z_$][\w$]*)\s*,\s*(\d+)\s*\)$/, expand: (m) => `${m[1]}.fgd({limit:${m[2]}})` },
+    { re: /^logins\(\s*(\d+)\s*\)$/, expand: (m) => `User.fg({filter:"exists(lastLoginAt)",order:"descending(lastLoginAt)",limit:${m[1]}})` },
+    { re: /^provs\(\s*(\d+)\s*\)$/, expand: (m) => `TagProvisionLog.fg({order:"descending(deployDate)",limit:${m[1]}})` },
+  ];
+
+  const HELP_TEXT = [
+    'Type.fg(spec|filter)   fetch(), unwrapped straight into a grid',
+    'Type.fd()              fetch() ordered newest first, gridded',
+    'Type.fgd(spec)         fetch() with a default newest-first order (spec can override), gridded',
+    'Type.fc(spec|filter)   fetchCount()',
+    'recents(Type, N)       Type.fgd({limit:N}) — most recent N instances',
+    'logins(N)              most recent N user logins',
+    'provs(N)               most recent N tag provisions',
+    'iq() / qs()            InvalidationQueue.countAll(), gridded',
+    'ad() / cad()           Cluster.actionDump(), gridded',
+    'ch()                   Cluster.hosts(), gridded',
+    'help() / shortcuts()   this list',
+  ].join('\n');
+
+  function expandShorthand(line) {
+    const trimmed = line.trim();
+    const bare = trimmed.match(/^([A-Za-z_$][\w$]*)\(\)$/);
+    if (bare && SHORTHANDS[bare[1]]) return SHORTHANDS[bare[1]];
+    for (const { re, expand } of ARG_SHORTHANDS) {
+      const m = trimmed.match(re);
+      if (m) return expand(m);
+    }
+    return line;
+  }
+
+  // ---- Interpreter — walks the AST, issuing one REST call per Call node.
+  // Convention: a root call (receiver is a bare Type identifier) sends the given args as-is.
+  // A chained call (receiver is itself a prior Call/Member result) is an instance method —
+  // the previous result is prepended as the first positional param.
+
+  function detectType(body, fallback) {
+    if (body && typeof body === 'object') {
+      if (typeof body.type === 'string') return body.type;
+      if (body.meta && typeof body.meta.type === 'string') return body.meta.type;
+    }
+    return fallback;
+  }
+
+  async function callRest(baseUrl, authToken, authStyle, typeName, method, params) {
+    const started = performance.now();
+    const res = await fetch('/api/run', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ baseUrl, authToken, authStyle, typeName, method, params }),
+    });
+    const data = await res.json();
+    const ms = Math.round(performance.now() - started);
+    if (!res.ok) throw new Error(`Proxy error (${res.status}) — ${data.error || 'unknown'}`);
+    const ok = data.status >= 200 && data.status < 300;
+    appendEntry(`<div class="trace ${ok ? '' : 'err'}">${escapeHtml(typeName)}.${escapeHtml(method)}() &rarr; HTTP ${data.status} &middot; ${ms}ms</div>`);
+    if (!ok) throw new Error(`${typeName}.${method}() failed — HTTP ${data.status}: ${JSON.stringify(data.body)}`);
+    return data.body;
+  }
+
+  // fg/fd/fgd/fc are shorthand for fetch/fetchCount, matching the real console's Better
+  // Console extension: a bare string arg becomes {filter: str}, a bare object arg is used
+  // as the spec as-is, and fd/fgd merge in a default newest-first order (spec can override).
+  // fg/fd/fgd additionally unwrap the {objs, count} envelope down to the objs array, so the
+  // grid renderer above (toGridRows) turns the result straight into columns instead of two
+  // opaque objs/count columns.
+  const FETCH_ALIASES = { fg: 'fetch', fd: 'fetch', fgd: 'fetch', fc: 'fetchCount' };
+  const FETCH_SPEC_DEFAULTS = {
+    fd: { order: 'descending(meta.created)' },
+    fgd: { order: 'descending(meta.created)' },
+  };
+
+  function normalizeFetchSpec(method, params) {
+    const arg = params[0];
+    const base = typeof arg === 'string' ? { filter: arg } : arg || {};
+    return { ...(FETCH_SPEC_DEFAULTS[method] || {}), ...base };
+  }
+
+  async function evalCallBody(ctx, typeName, method, params) {
+    const restMethod = FETCH_ALIASES[method];
+    if (!restMethod) {
+      const body = await callRest(ctx.baseUrl, ctx.authToken, ctx.authStyle, typeName, method, params);
+      return { value: body, typeName: detectType(body, typeName) };
+    }
+    // A no-arg fg()/fc() sends zero params (the platform's own "fetch everything" default) —
+    // sending an explicit empty spec object instead 500s on at least one real sandbox.
+    const spec = normalizeFetchSpec(method, params);
+    const restParams = Object.keys(spec).length === 0 ? [] : [spec];
+    const body = await callRest(ctx.baseUrl, ctx.authToken, ctx.authStyle, typeName, restMethod, restParams);
+    if (restMethod !== 'fetch') return { value: body, typeName: detectType(body, typeName) };
+    const value = Array.isArray(body?.objs) ? body.objs : body;
+    return { value, typeName: detectType(Array.isArray(value) ? value[0] : value, typeName) };
+  }
+
+  async function evalArgs(nodes, ctx) {
+    const out = [];
+    for (const n of nodes) out.push((await evalNode(n, ctx)).value);
+    return out;
+  }
+
+  async function evalNode(node, ctx) {
+    switch (node.kind) {
+      case 'Literal':
+        return { value: node.value, typeName: undefined };
+      case 'Array': {
+        const value = [];
+        for (const el of node.elements) value.push((await evalNode(el, ctx)).value);
+        return { value, typeName: undefined };
+      }
+      case 'Object': {
+        const value = {};
+        for (const p of node.props) value[p.key] = (await evalNode(p.value, ctx)).value;
+        return { value, typeName: undefined };
+      }
+      case 'Identifier':
+        throw new Error(`'${node.name}' can't be used by itself — call a method on it, e.g. ${node.name}.someMethod(...)`);
+      case 'Member': {
+        if (node.object.kind === 'Identifier') {
+          throw new Error(`'${node.object.name}.${node.property}' — bare type field access isn't supported, call a method instead`);
+        }
+        const obj = await evalNode(node.object, ctx);
+        const value = obj.value == null ? undefined : obj.value[node.property];
+        return { value, typeName: undefined };
+      }
+      case 'Call': {
+        const isRoot = node.object.kind === 'Identifier';
+        if (isRoot) {
+          const typeName = node.object.name;
+          const params = await evalArgs(node.args, ctx);
+          return await evalCallBody(ctx, typeName, node.method, params);
+        }
+        const receiver = await evalNode(node.object, ctx);
+        if (!receiver.typeName) {
+          throw new Error(`Can't call '.${node.method}(...)' — the value before it isn't a resolved C3 type (probably a plucked field)`);
+        }
+        const args = await evalArgs(node.args, ctx);
+        const params = [receiver.value, ...args];
+        return await evalCallBody(ctx, receiver.typeName, node.method, params);
+      }
+      default:
+        throw new Error(`Internal error: unknown node kind '${node.kind}'`);
+    }
+  }
+
+  async function runLine(line) {
+    appendEntry(`<div class="cmd">${escapeHtml(line)}</div>`);
+
+    if (line.trim() === 'help()' || line.trim() === 'shortcuts()') {
+      appendEntry(`<div class="meta">${escapeHtml(HELP_TEXT).replace(/\n/g, '<br>')}</div>`);
+      return;
+    }
+
+    const baseUrl = baseUrlEl.value.trim();
+    const authToken = authTokenEl.value.trim();
+    const authStyle = authStyleEl.value;
+
+    if (!baseUrl || !authToken) {
+      appendEntry(`<div class="meta err">App URL and Auth Token are required (fields above).</div>`);
+      return;
+    }
+
+    const expanded = expandShorthand(line);
+    if (expanded !== line) {
+      appendEntry(`<div class="trace">&rarr; ${escapeHtml(expanded)}</div>`);
+    }
+
+    let ast;
+    try {
+      ast = parseLine(expanded);
+    } catch (e) {
+      appendEntry(`<div class="meta err">${escapeHtml(e.message)}</div>`);
+      return;
+    }
+
+    try {
+      const { value } = await evalNode(ast, { baseUrl, authToken, authStyle });
+      const { html, wire } = buildResultView(value);
+      const entryDiv = appendEntry(html);
+      wire(entryDiv);
+    } catch (e) {
+      appendEntry(`<div class="meta err">${escapeHtml(e.message)}</div>`);
+    }
+  }
+
+  function submit() {
+    const line = cmdInput.value.trim();
+    if (!line) return;
+    if (history[history.length - 1] !== line) {
+      history.push(line);
+    }
+    historyIdx = history.length;
+    draft = '';
+    hintLineEl.textContent = '';
+    setCmdInput('');
+    runLine(line).finally(() => {
+      syncActiveTabFromUI();
+      persistState();
+    });
+  }
+
+  function isCursorOnFirstLine() {
+    return cmdInput.value.slice(0, cmdInput.selectionStart).indexOf('\n') === -1;
+  }
+  function isCursorOnLastLine() {
+    return cmdInput.value.slice(cmdInput.selectionEnd).indexOf('\n') === -1;
+  }
+
+  cmdInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      submit();
+    } else if (e.key === 'Tab') {
+      e.preventDefault();
+      autocomplete();
+    } else if (e.key === 'ArrowUp') {
+      if (isCursorOnFirstLine() && historyIdx > 0) {
+        if (historyIdx === history.length) draft = cmdInput.value;
+        historyIdx--;
+        setCmdInput(history[historyIdx] || '');
+        e.preventDefault();
+      }
+    } else if (e.key === 'ArrowDown') {
+      if (isCursorOnLastLine() && historyIdx < history.length) {
+        historyIdx++;
+        setCmdInput(historyIdx === history.length ? draft : history[historyIdx]);
+        e.preventDefault();
+      }
+    }
+  });
+
+  clearBtn.addEventListener('click', () => {
+    consoleEl.innerHTML = '';
+    syncActiveTabFromUI();
+    persistState();
+  });
+
+  // ---- Zoom: scales the whole console output (Chrome's own `zoom` property — this app only
+  // ever runs in a Chrome --app= window, so it's safe to rely on) so dense grids fit on screen.
+  let consoleZoom = 1;
+  const zoomLabelEl = $('zoomLabel');
+  function applyZoom() {
+    consoleEl.style.zoom = consoleZoom;
+    zoomLabelEl.textContent = `${Math.round(consoleZoom * 100)}%`;
+  }
+  $('zoomOutBtn').addEventListener('click', () => { consoleZoom = Math.max(0.5, +(consoleZoom - 0.1).toFixed(2)); applyZoom(); });
+  $('zoomInBtn').addEventListener('click', () => { consoleZoom = Math.min(1.5, +(consoleZoom + 0.1).toFixed(2)); applyZoom(); });
+  applyZoom();
+
+  document.addEventListener('keydown', (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      e.preventDefault();
+      consoleEl.innerHTML = '';
+      syncActiveTabFromUI();
+      persistState();
+    } else if (e.ctrlKey && e.altKey && !e.metaKey && e.code === 'KeyT') {
+      e.preventDefault();
+      newTab();
+    } else if (e.ctrlKey && e.altKey && !e.metaKey && e.code === 'KeyW') {
+      e.preventDefault();
+      closeTab(activeTabId);
+    }
+  });
+
+  baseUrlEl.addEventListener('blur', () => { syncActiveTabFromUI(); persistState(); refreshTypeCatalog(); });
+  authTokenEl.addEventListener('blur', () => { syncActiveTabFromUI(); persistState(); refreshTypeCatalog(); });
+  authStyleEl.addEventListener('change', () => { syncActiveTabFromUI(); persistState(); refreshTypeCatalog(); });
+  window.addEventListener('beforeunload', () => { syncActiveTabFromUI(); persistState(); });
+
+  async function loadState() {
+    let state = {};
+    try {
+      const res = await fetch('/api/state');
+      state = await res.json();
+    } catch (e) {
+      console.error('Failed to load c3-console state', e);
+    }
+
+    if (Array.isArray(state.tabs) && state.tabs.length > 0) tabs = state.tabs;
+    activeTabId = tabs.some((t) => t.id === state.activeTabId) ? state.activeTabId : tabs[0].id;
+    if (Array.isArray(state.profiles)) profiles = state.profiles;
+    if (Array.isArray(state.snippets)) snippets = state.snippets;
+
+    loadTabIntoUI(activeTab());
+    renderTabs();
+    renderProfiles();
+    renderSnippets();
+    cmdInput.focus();
+    refreshTypeCatalog();
+  }
+
+  loadState();
+</script>
+</body>
+</html>
